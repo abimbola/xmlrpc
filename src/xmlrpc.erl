@@ -36,7 +36,7 @@
 
 -module(xmlrpc).
 
--export([call/3, call/4, call/5, call/6]).
+-export([call/4, call/5, call/6, call/7]).
 -export([start_link/1, start_link/5, start_link/6, start_link/7, stop/1]).
 
 -export([ssl_call/3, ssl_call/4, ssl_call/5, ssl_call/6]).
@@ -123,6 +123,7 @@ cbs_opaque(#cback_state{}=C, Opaque) ->
 %%%
 %%% Quick and dirty solution for adding SSL support.
 %%%
+%%%Todo fix SSL Opts
 -define(SSL, ssl).
 
 -spec ssl_call(Socket, URI, Payload) -> call_result()
@@ -135,7 +136,7 @@ cbs_opaque(#cback_state{}=C, Opaque) ->
 
 ssl_call(Socket, URI, Payload) ->
     put(proto, ?SSL),
-    call(Socket, URI, Payload).
+    call(Socket, URI, Payload,[]).
 
 -spec ssl_call(Host, Port, URI, Payload) -> call_result()
  when Host :: host(),
@@ -148,7 +149,7 @@ ssl_call(Socket, URI, Payload) ->
 
 ssl_call(Host, Port, URI, Payload) ->
     put(proto, ?SSL),
-    call(Host, Port, URI, Payload).
+    call(Host, Port, URI, Payload, []).
 
 -spec ssl_call(Socket, URI, Payload, KeepAlive, Timeout) -> call_result()
  when Socket :: socket(),
@@ -162,7 +163,7 @@ ssl_call(Host, Port, URI, Payload) ->
 
 ssl_call(Socket, URI, Payload, KeepAlive, Timeout) ->
     put(proto, ?SSL),
-    call(Socket, URI, Payload, KeepAlive, Timeout).
+    call(Socket, URI, Payload, KeepAlive, Timeout, []).
 
 -spec ssl_call(Host, Port, URI, Payload, KeepAlive, Timeout) -> call_result()
  when Host :: host(),
@@ -177,30 +178,32 @@ ssl_call(Socket, URI, Payload, KeepAlive, Timeout) ->
 
 ssl_call(Host, Port, URI, Payload, KeepAlive, Timeout) ->
     put(proto, ?SSL),
-    call(Host, Port, URI, Payload, KeepAlive, Timeout).
+    call(Host, Port, URI, Payload, KeepAlive, Timeout, []).
 
 
 
-%% Exported: call/{3,4,5,6}
+%% Exported: call/{4,5,6,7}
 
--spec call(Host, Port, URI, Payload) -> call_result()
+-spec call(Host, Port, URI, Payload, Opts) -> call_result()
  when Host :: host(),
       Port :: integer(),
       URI :: uri(),
-      Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]}.
+      Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
+      Opts :: [{string(), string()}].
 
 %% @equiv call(Host, Port, URI, Payload, false, 60000)
 
-call(Host, Port, URI, Payload) ->
-    call(Host, Port, URI, Payload, false, 60000).
+call(Host, Port, URI, Payload, Opts) ->
+    call(Host, Port, URI, Payload, false, 60000, Opts).
 
--spec call(Host, Port, URI, Payload, KeepAlive, Timeout) -> call_result()
+-spec call(Host, Port, URI, Payload, KeepAlive, Timeout, Opts) -> call_result()
  when Host :: host(),
       Port :: integer(),
       URI :: uri(),
       Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
       KeepAlive :: boolean(),
-      Timeout :: integer().
+      Timeout :: integer(),
+      Opts :: [{string(), string()}].
 
 %% @doc Calls an XML-RPC server listening on `Host:Port'. The arguments
 %% `URI' and `Payload' are used in the HTTP POST request sent to the server.
@@ -216,39 +219,41 @@ call(Host, Port, URI, Payload) ->
 %%
 %% @see ssl_call/6
 
-call(Host, Port, URI, Payload, KeepAlive, Timeout) ->
+call(Host, Port, URI, Payload, KeepAlive, Timeout, Opts) ->
     case connect(Host, Port, [{active, false}]) of
-	{ok, Socket} -> call(Socket, {Host,URI}, Payload, KeepAlive, Timeout);
+	{ok, Socket} -> call(Socket, {Host,URI}, Payload, KeepAlive, Timeout, Opts);
 	{error, Reason} when KeepAlive == false -> {error, Reason};
 	{error, Reason} -> {error, undefined, Reason}
     end.
 
--spec call(Socket, URI, Payload) -> call_result()
+-spec call(Socket, URI, Payload, Opts) -> call_result()
  when Socket :: socket(),
       URI :: uri(),
-      Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]}.
+      Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
+      Opts :: [{string(), string()}].
 
 %% @equiv call(Socket, URI, Payload, false, 60000)
 
-call(Socket, URI, Payload) ->
-    call(Socket, URI, Payload, false, 60000).
+call(Socket, URI, Payload, Opts) ->
+    call(Socket, URI, Payload, false, 60000, Opts).
 
--spec call(Socket, URI, Payload, KeepAlive, Timeout) -> call_result()
+-spec call(Socket, URI, Payload, KeepAlive, Timeout, Opts) -> call_result()
  when Socket :: socket(),
       URI :: uri() | {host(), uri()},
       Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
       KeepAlive :: boolean(),
-      Timeout :: integer().
+      Timeout :: integer(),
+      Opts :: [{string(), string()}].
 
 %% @doc Calls an XML-RPC server on an open connection.
 %% @see call/6
 
-call(Socket, URI, Payload, KeepAlive, Timeout) ->
+call(Socket, URI, Payload, KeepAlive, Timeout, Opts) ->
     ?DEBUG_LOG({decoded_call, Payload}),
     case xmlrpc_encode:payload(Payload) of
 	{ok, EncodedPayload} ->
 	    ?DEBUG_LOG({encoded_call, EncodedPayload}),
-	    case send(Socket, URI, KeepAlive, EncodedPayload) of
+	    case send(Socket, URI, KeepAlive, EncodedPayload, Opts) of
 		ok ->
 		    case parse_response(Socket, Timeout) of
 			{ok, Header} ->
@@ -267,31 +272,30 @@ call(Socket, URI, Payload, KeepAlive, Timeout) ->
 	{error, Reason} when KeepAlive == false ->
 	    close(Socket),
 	    {error, Reason};
-	{error, Reason} -> {error, Socket, Reason}
+	{error, Reason} -> io:format("3~n",[]), {error, Socket, Reason}
     end.
 
-send(Socket, URI, false, Payload) ->
-    send(Socket, URI, "Connection: close\r\n", Payload);
-send(Socket, URI, true, Payload) -> send(Socket, URI, "", Payload);
+send(Socket, URI, false, Payload, Opts) ->
+    send(Socket, URI, processOpts(Opts) ++ "Connection: close\r\n", Payload);
+send(Socket, URI, true, Payload, Opts) -> send(Socket, URI, processOpts(Opts), Payload).
 send(Socket, {Host,URI}, Header, Payload) ->
     Request =
 	["POST ", URI, " HTTP/1.1\r\n",
 	 "Content-Length: ", integer_to_list(lists:flatlength(Payload)),
 	 "\r\n",
-	 "User-Agent: Erlang XML-RPC Client 1.13\r\n",
 	 "Content-Type: text/xml\r\n",
 	 "Host: ", Host, "\r\n",
-	 Header, "\r\n",
+	 Header,"\r\n",
 	 Payload],
+	 io:format("~p~n", [Request]),
     send(Socket, Request);
 send(Socket, URI, Header, Payload) ->
     Request =
 	["POST ", URI, " HTTP/1.1\r\n",
 	 "Content-Length: ", integer_to_list(lists:flatlength(Payload)),
 	 "\r\n",
-	 "User-Agent: Erlang XML-RPC Client 1.13\r\n",
-	 "Content-Type: text/XML\r\n",
-	 Header, "\r\n",
+	 "Content-Type: text/xml\r\n",
+	 Header,"\r\n",
 	 Payload],
     send(Socket, Request).
 
@@ -474,6 +478,13 @@ setopts(Socket, Opts) ->
 
 setopts(?SSL, Socket, Opts) -> ssl:setopts(Socket, Opts);
 setopts(_,    Socket, Opts) -> inet:setopts(Socket, Opts).
+
+processOpts(Opts) -> processOpts(Opts, []).
+
+processOpts([], Acc) -> Acc;
+processOpts([{HeaderType, HeaderValue}|T], Acc) -> 
+NAcc = Acc ++ HeaderType ++ ": " ++ HeaderValue ++ "\r\n",
+processOpts(T, NAcc). 
 
 
 
