@@ -189,7 +189,7 @@ ssl_call(Host, Port, URI, Payload, KeepAlive, Timeout) ->
       Port :: integer(),
       URI :: uri(),
       Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
-      Opts :: [{string(), string()}].
+      Opts :: []|[{string(), string()}].
 
 %% @equiv call(Host, Port, URI, Payload, false, 60000)
 
@@ -203,7 +203,7 @@ call(Host, Port, URI, Payload, Opts) ->
       Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
       KeepAlive :: boolean(),
       Timeout :: integer(),
-      Opts :: [{string(), string()}].
+      Opts :: []|[{string(), string()}].
 
 %% @doc Calls an XML-RPC server listening on `Host:Port'. The arguments
 %% `URI' and `Payload' are used in the HTTP POST request sent to the server.
@@ -230,7 +230,7 @@ call(Host, Port, URI, Payload, KeepAlive, Timeout, Opts) ->
  when Socket :: socket(),
       URI :: uri(),
       Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
-      Opts :: [{string(), string()}].
+      Opts :: []|[{string(), string()}].
 
 %% @equiv call(Socket, URI, Payload, false, 60000)
 
@@ -243,7 +243,7 @@ call(Socket, URI, Payload, Opts) ->
       Payload :: {call, Method::atom(), Arguments::[xmlrpc_value()]},
       KeepAlive :: boolean(),
       Timeout :: integer(),
-      Opts :: [{string(), string()}].
+      Opts :: []|[{string(), string()}].
 
 %% @doc Calls an XML-RPC server on an open connection.
 %% @see call/6
@@ -272,7 +272,7 @@ call(Socket, URI, Payload, KeepAlive, Timeout, Opts) ->
 	{error, Reason} when KeepAlive == false ->
 	    close(Socket),
 	    {error, Reason};
-	{error, Reason} -> io:format("3~n",[]), {error, Socket, Reason}
+	{error, Reason} -> {error, Socket, Reason}
     end.
 
 send(Socket, URI, false, Payload, Opts) ->
@@ -287,7 +287,6 @@ send(Socket, {Host,URI}, Header, Payload) ->
 	 "Host: ", Host, "\r\n",
 	 Header,"\r\n",
 	 Payload],
-	 io:format("~p~n", [Request]),
     send(Socket, Request);
 send(Socket, URI, Header, Payload) ->
     Request =
